@@ -315,6 +315,8 @@ class LavalinkPlayer(wavelink.Player):
         self.bot.loop.create_task(self.channel_cleanup())
         self.mini_queue_feature = False
         self.mini_queue_enabled = False
+        self.is_resuming = False
+        self.last_channel: Optional[disnake.VoiceChannel] = None
 
         self.start_time = disnake.utils.utcnow()
 
@@ -386,6 +388,7 @@ class LavalinkPlayer(wavelink.Player):
             await self.text_channel.purge(check=check)
 
     async def connect(self, channel_id: int, self_mute: bool = False, self_deaf: bool = False):
+        self.last_channel = self.bot.get_channel(channel_id)
         await super().connect(channel_id, self_mute=self_mute, self_deaf=True)
 
     def process_hint(self):
@@ -467,11 +470,12 @@ class LavalinkPlayer(wavelink.Player):
             return
 
         if not track:
+            await self.process_next()
             return
 
-        if isinstance(track, PartialTrack):
+        self.locked = True
 
-            self.locked = True
+        if isinstance(track, PartialTrack):
 
             if not track.id:
                 try:
@@ -487,10 +491,11 @@ class LavalinkPlayer(wavelink.Player):
                         )
                     except:
                         traceback.print_exc()
+
+                    self.locked = False
+
                     await self.process_next()
                     return
-
-            self.locked = False
 
             if not track.id:
                 try:
@@ -503,10 +508,14 @@ class LavalinkPlayer(wavelink.Player):
                     )
                 except:
                     traceback.print_exc()
+
+                self.locked = False
+
                 await self.process_next()
                 return
 
         elif not track.id:
+
             t = await self.node.get_tracks(track.uri)
 
             if not t:
@@ -520,6 +529,9 @@ class LavalinkPlayer(wavelink.Player):
                     )
                 except:
                     traceback.print_exc()
+
+                self.locked = False
+
                 await self.process_next()
                 return
 
@@ -530,7 +542,6 @@ class LavalinkPlayer(wavelink.Player):
         self.is_previows_music = False
 
         self.locked = False
-
         await self.play(track, start=start_position)
         self.start_time = disnake.utils.utcnow()
 
